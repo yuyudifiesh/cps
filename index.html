@@ -728,8 +728,13 @@
         }
         updateGreetingAndDate();
 
-        // Navigation Logic
+        // Navigation Logic using Query Parameters (?page=xxx)
         let screenStack = ['screen-home'];
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
 
         function navigateTo(targetId, direction) {
             const currentId = screenStack[screenStack.length - 1];
@@ -738,7 +743,7 @@
             const currentEl = document.getElementById(currentId);
             const targetEl = document.getElementById(targetId);
 
-            // Hide snackbar when leaving any screen to ensure clean state
+            // Always hide snackbar when navigating away or to a different screen
             hideSnackbar();
 
             if (direction === 'forward') {
@@ -747,33 +752,50 @@
                 currentEl.classList.remove('active');
                 currentEl.classList.add('hidden-left');
                 screenStack.push(targetId);
+                
+                // Update URL without reloading
+                const newUrl = `${window.location.pathname}?page=${targetId}`;
+                window.history.pushState({ page: targetId }, '', newUrl);
+
+                // SPECIFIC LOGIC: Only check UA and show snackbar when entering IoT screen
+                if (targetId === 'screen-iot-2603') {
+                    checkWeChatAndShowSnackbar();
+                }
             } else {
                 targetEl.classList.remove('hidden-right', 'hidden-left');
                 targetEl.classList.add('active');
                 currentEl.classList.remove('active');
                 currentEl.classList.add('hidden-right');
                 screenStack.pop();
+                
+                // Update URL for back navigation
+                const prevId = screenStack[screenStack.length - 1];
+                const newUrl = `${window.location.pathname}?page=${prevId}`;
+                window.history.pushState({ page: prevId }, '', newUrl);
             }
 
             targetEl.scrollTop = 0;
         }
 
+        // Handle browser back/forward buttons
         window.addEventListener('popstate', (e) => {
-            if (screenStack.length > 1) {
-                e.preventDefault();
+            if (e.state && e.state.page) {
+                const targetId = e.state.page;
                 const currentId = screenStack[screenStack.length - 1];
-                const prevId = screenStack[screenStack.length - 2];
-                navigateTo(prevId, 'back');
+                
+                // Determine direction based on stack
+                if (screenStack.includes(targetId)) {
+                    // It's a back action if target is already in stack below current
+                    navigateTo(targetId, 'back');
+                } else {
+                    // It's a forward action (rare in this simple stack model but good to handle)
+                    navigateTo(targetId, 'forward');
+                }
+            } else {
+                // Default to home if no state
+                navigateTo('screen-home', 'back');
             }
         });
-
-        const originalNavigateTo = navigateTo;
-        navigateTo = function(targetId, direction) {
-            if (direction === 'forward') {
-                history.pushState({ screen: targetId }, '', `#${targetId}`);
-            }
-            originalNavigateTo(targetId, direction);
-        };
 
         // Dialog Logic
         function showAboutDialog() {
@@ -798,7 +820,7 @@
             });
         });
 
-        // Iframe Loading and WeChat Detection Logic (Specific to IoT Screen)
+        // Iframe Loading Logic
         const iotIframe = document.getElementById('iot-iframe');
         const loadingOverlay = document.getElementById('loading-overlay');
         const snackbar = document.getElementById('snackbar');
@@ -807,6 +829,7 @@
             snackbar.classList.remove('active');
         }
 
+        // Specific UA Check Function
         function checkWeChatAndShowSnackbar() {
             const ua = navigator.userAgent.toLowerCase();
             const isWeChat = /wechat|weixin/i.test(ua);
@@ -817,21 +840,20 @@
             }
         }
 
+        // Handle iframe load to hide loader
         iotIframe.addEventListener('load', () => {
             loadingOverlay.classList.add('hidden');
-            checkWeChatAndShowSnackbar();
         });
 
-        // Fallback timeout
+        // Fallback timeout for loader
         setTimeout(() => {
             if (!loadingOverlay.classList.contains('hidden')) {
                 loadingOverlay.classList.add('hidden');
-                checkWeChatAndShowSnackbar();
             }
         }, 3000);
 
         function copyLink() {
-            const link = "https://yuyudifiesh.github.io/cps/index.html?page=docs-iot2603";
+            const link = "https://yuyudifiesh.github.io/cps/index.html?page=screen-iot-2603";
             navigator.clipboard.writeText(link).then(() => {
                 const actionBtn = document.querySelector('.snackbar-action');
                 const originalText = actionBtn.textContent;
@@ -844,7 +866,28 @@
             });
         }
 
-        history.replaceState({ screen: 'screen-home' }, '', '#screen-home');
+        // Initialize page based on URL parameter
+        window.addEventListener('DOMContentLoaded', () => {
+            const pageParam = getQueryParam('page');
+            if (pageParam && pageParam !== 'screen-home') {
+                // If URL has a specific page, show it immediately without animation
+                const targetEl = document.getElementById(pageParam);
+                const homeEl = document.getElementById('screen-home');
+                
+                if (targetEl) {
+                    homeEl.classList.remove('active');
+                    homeEl.classList.add('hidden-left'); // Assume coming from home
+                    targetEl.classList.remove('hidden-right');
+                    targetEl.classList.add('active');
+                    screenStack = ['screen-home', pageParam]; // Reconstruct stack
+                    
+                    // If it's the IoT page, trigger checks
+                    if (pageParam === 'screen-iot-2603') {
+                        checkWeChatAndShowSnackbar();
+                    }
+                }
+            }
+        });
     </script>
 </body>
 </html>
